@@ -1,0 +1,27 @@
+#+STARTUP: content
+#+STARTUP: overview
+#+STARTUP: indent
+#+TITLE: Análise do Tamanho do Volume
+
+
+* Experimentos
+
+Foram realizados experimentos para determinar qual tamanho de volume tem a
+máxima ocupação dos trabalhadores no /star-fletcher/.
+Utilizou-se 3 máquinas, a /draco/, /poti/ e /cei/ para os experimentos, sendo
+gerados a partir do arquivo /experiments.R/.
+
+% use C-c ' para ver os conteúdos do arquivo
+% Bonus: use C-c - para fazer um texto virar lista
+#+INCLUDE: "./experiments.R" src R
+
+Nisso, tenho agora que descobrir qual o menor tamanho de meio que ocupa todos os trabalhadores.
+
+
+#+BEGIN_SRC R
+  print("hello")
+  
+#+END_SRC
+
+#+RESULTS:
+: hello
