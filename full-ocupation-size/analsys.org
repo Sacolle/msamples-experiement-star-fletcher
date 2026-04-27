@@ -17,11 +17,87 @@ gerados a partir do arquivo /experiments.R/.
 
 Nisso, tenho agora que descobrir qual o menor tamanho de meio que ocupa todos os trabalhadores.
 
+** Conversão
+Convertemos os /prof_file_/ para /.parquet/
 
-#+BEGIN_SRC R
-  print("hello world")
-  
+Organizar os arquivos
+#+BEGIN_SRC shell 
+  DIR='./experimental-results'
+
+  pushd $DIR
+
+  for d in "poti2" "draco1" "cei2"; do
+    echo $d
+    pushd ./$d
+    for file in prof_file_*; do
+        temp=${file#prof_file_}
+        temp=${temp%_0}
+
+        IFS='-' read -r io size seg iter <<< "$temp"
+        FOLDER=./$io/$size/$seg/$iter
+        mkdir -p $FOLDER
+        mv $file $FOLDER
+    done
+    popd
+  done
+
+
 #+END_SRC
 
 #+RESULTS:
-: hello world
+| ~/experiments/msamples-cpu-star-fletcher/full-ocupation-size/experimental-results        | ~/experiments/msamples-cpu-star-fletcher/full-ocupation-size                      |                                                              |
+| poti2                                                                                    |                                                                                   |                                                              |
+| ~/experiments/msamples-cpu-star-fletcher/full-ocupation-size/experimental-results/poti2  | ~/experiments/msamples-cpu-star-fletcher/full-ocupation-size/experimental-results | ~/experiments/msamples-cpu-star-fletcher/full-ocupation-size |
+| ~/experiments/msamples-cpu-star-fletcher/full-ocupation-size/experimental-results        | ~/experiments/msamples-cpu-star-fletcher/full-ocupation-size                      |                                                              |
+| draco1                                                                                   |                                                                                   |                                                              |
+| ~/experiments/msamples-cpu-star-fletcher/full-ocupation-size/experimental-results/draco1 | ~/experiments/msamples-cpu-star-fletcher/full-ocupation-size/experimental-results | ~/experiments/msamples-cpu-star-fletcher/full-ocupation-size |
+| ~/experiments/msamples-cpu-star-fletcher/full-ocupation-size/experimental-results        | ~/experiments/msamples-cpu-star-fletcher/full-ocupation-size                      |                                                              |
+| cei2                                                                                     |                                                                                   |                                                              |
+| ~/experiments/msamples-cpu-star-fletcher/full-ocupation-size/experimental-results/cei2   | ~/experiments/msamples-cpu-star-fletcher/full-ocupation-size/experimental-results | ~/experiments/msamples-cpu-star-fletcher/full-ocupation-size |
+| ~/experiments/msamples-cpu-star-fletcher/full-ocupation-size/experimental-results        | ~/experiments/msamples-cpu-star-fletcher/full-ocupation-size                      |                                                              |
+
+O comando ~dir="${file%/*}"~, pega o conteúdo de file, remove do fim (símbolo %) a última ocorrência de / seguido de qualquer coisa.
+Se usa-se #, seria a primeira ocorrência.
+
+#+BEGIN_SRC shell 
+  find ./experimental-results -type f -name "prof_file_*_0" -exec bash -c '
+    file="$1"
+    dir="${file%/*}"
+    echo "Processing directory: $dir"
+    cd "$dir" && starvz -1 .
+' _ {} \;
+#+END_SRC
+
+#+RESULTS:
+
+
+** Análise
+
+#+BEGIN_SRC R
+  options(crayon.enabled = FALSE)
+  library(starvz)
+  library(tidyverse)
+
+  base_dir = "./experimental-results"
+  dirs = list.dirs(base_dir, recursive = FALSE)
+
+  ds <- tibble(DIR = dirs) |>
+    mutate(Machine = basename(DIR))
+
+  experiments <- read_csv('./experiments-cpu.csv')
+
+  all <- ds |> cross_join(experiments)
+
+  all |>
+     mutate(PATH = paste0(DIR,"/", WithIO, "/", Size, "/",Segmentation, "/", Steps)) |> print()
+     # mutate(DATA = map(PATH, starvz_read)) |> print()
+     #mutate(OCCUPANCY = map(DATA, function(x) {
+     #app = x$Application
+     #app |> group_by(Value) |> summarize(N = n())
+     #})) |>
+     #unnest(OCCUPANCY) |>
+     #select(Machine, Value, N)
+
+#+END_SRC
+
+#+RESULTS:
