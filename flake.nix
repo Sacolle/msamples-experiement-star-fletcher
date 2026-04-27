@@ -4,8 +4,9 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-unstable";
     starvz.url = "github:schnorr/starvz";
+    starpu.url = "github:Sacolle/nix-starpu";
   };
-  outputs = { self, starvz, nixpkgs }: 
+  outputs = { self, starvz, starpu, nixpkgs }: 
       let 
         system = "x86_64-linux";
         pkgs = import nixpkgs { inherit system; };
@@ -21,8 +22,21 @@
                 starvz.packages.${system}.starvz
             ];
         };
+        StarPU = starpu.packages.${system}.default.override {
+            enableCUDA = false;
+            enableTrace = true;
+            extraOptions = [ "--enable-maxcpus=256" "--enable-fxt-max-files=256" ];
+        };
+        myStarvzTools = starvz.packages.${system}.starvzTools.override {
+            inherit StarPU;
+        };
     in 
   {
-        devShells.${system}.default = pkgs.mkShell { buildInputs =  [ rEnv ]; };
+        devShells.${system}.default = pkgs.mkShell { 
+            buildInputs =  [ 
+                rEnv 
+                myStarvzTools
+            ]; 
+        };
   };
 }
