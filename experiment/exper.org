@@ -1,0 +1,506 @@
+* Fazer os dados do experimento
+
+
+** Projeto Experimental
+
+Temos um tamanho fixo, 120, e quantas segmentações temos.
+Isso no gráfico resulta em tamanhos de blocos diferentes.
+Agora é rodar com várias replicações para evitar desvios e
+fazer isso para o Star-Fletcher e o Fletcher-base.
+
+#+BEGIN_SRC R :session *R* :async yes
+  library(DoE.base)
+  library(glue)
+  library(tidyverse)
+
+  border_size = 4
+  absorb_size = 8
+  width = 120 - 2 * (border_size + absorb_size)
+  seed = 0
+  output = 5 # output every 5 steps
+  replications = 8
+
+  generate_experiment <- function(factors, replications, seed) {
+    DoE.base::fac.design(
+      nfactors = length(factors),
+      replications = replications,
+      repeat.only = FALSE,
+      randomize = TRUE,
+      seed = seed,
+      nlevels = sapply(factors, length),
+      factor.names = factors
+    )
+  }
+
+  cpu_factors <- list(
+    WithIO = c(0, 1),
+    Segmentation = c(3, 4, 5, 6, 8, 10, 12)
+  )
+
+  # machines = c("poti", "cei", "draco")
+
+
+  ex <- generate_experiment(cpu_factors, replications, seed)
+
+  print(dim(ex))
+
+  ex |> readr::write_csv(glue("./ex-cpu-msamples.csv"))
+#+END_SRC
+
+#+RESULTS:
+
+
+
+** Análise de Dados
+
+
+#+BEGIN_SRC R :session *R* :async yes
+  options(crayon.enabled = FALSE)
+  library(starvz)
+  library(tidyverse)
+  library(ggplot2)
+  library(dplyr)
+
+  base_dir = "./experimental-results"
+
+  machines <- tribble(
+    ~Machine, ~Processor, ~Ghz, ~Threads, ~Cores,
+    "poti1", "Intel(R) Core(TM) i7-14700KF", 3.4, 28, 20,
+    "cei2", "2 x Intel(R) Xeon(R) Silver 4116", 2.1, 48, 24,
+    "draco1", "2 x Intel(R) Xeon(R) E5-2640 v2", 2.0, 32, 16
+  )
+
+  experiments <- read_csv('./ex-cpu-msamples.csv')
+
+  all <- machines |> cross_join(experiments)
+
+  msamples_table <- all |>
+    mutate(FILE = paste0(base_dir,"/", Machine ,"/stdout-", WithIO, "-", Segmentation, "-", substring(1, Blocks), ".out")) |>
+    mutate(BlockSize = 120 / Segmentation) |>
+    mutate(Msamples = map_dbl(FILE, function(file) {
+      #print(file)
+      read_lines(file) |>
+        tail(1) |>
+        str_remove("Msamples/s: ") |>
+        as.numeric()
+    })) 
+#+END_SRC
+
+#+RESULTS:
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 | 12 | 0.1 | ./experimental-results/poti1/stdout-1-12-1.out  | 10 | 12.055414 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  8 | 0.1 | ./experimental-results/poti1/stdout-0-8-1.out   | 15 | 24.663609 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  4 | 0.1 | ./experimental-results/poti1/stdout-1-4-1.out   | 30 |  5.715538 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  6 | 0.1 | ./experimental-results/poti1/stdout-0-6-1.out   | 20 | 13.780027 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  3 | 0.1 | ./experimental-results/poti1/stdout-0-3-1.out   | 40 |  3.500298 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  3 | 0.1 | ./experimental-results/poti1/stdout-1-3-1.out   | 40 |  3.361356 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  5 | 0.1 | ./experimental-results/poti1/stdout-0-5-1.out   | 24 |  8.969071 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 | 10 | 0.1 | ./experimental-results/poti1/stdout-0-10-1.out  | 12 | 20.985768 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  4 | 0.1 | ./experimental-results/poti1/stdout-0-4-1.out   | 30 |  5.372603 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 | 12 | 0.1 | ./experimental-results/poti1/stdout-0-12-1.out  | 10 | 11.986502 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  5 | 0.1 | ./experimental-results/poti1/stdout-1-5-1.out   | 24 |   8.98786 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 | 10 | 0.1 | ./experimental-results/poti1/stdout-1-10-1.out  | 12 | 20.108981 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  8 | 0.1 | ./experimental-results/poti1/stdout-1-8-1.out   | 15 | 24.502174 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  6 | 0.1 | ./experimental-results/poti1/stdout-1-6-1.out   | 20 | 13.892226 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  5 | 0.2 | ./experimental-results/poti1/stdout-0-5-1.out   | 24 |  8.969071 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  8 | 0.2 | ./experimental-results/poti1/stdout-1-8-1.out   | 15 | 24.502174 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  5 | 0.2 | ./experimental-results/poti1/stdout-1-5-1.out   | 24 |   8.98786 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 | 12 | 0.2 | ./experimental-results/poti1/stdout-0-12-1.out  | 10 | 11.986502 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  6 | 0.2 | ./experimental-results/poti1/stdout-0-6-1.out   | 20 | 13.780027 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  8 | 0.2 | ./experimental-results/poti1/stdout-0-8-1.out   | 15 | 24.663609 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 | 10 | 0.2 | ./experimental-results/poti1/stdout-0-10-1.out  | 12 | 20.985768 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 | 12 | 0.2 | ./experimental-results/poti1/stdout-1-12-1.out  | 10 | 12.055414 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  6 | 0.2 | ./experimental-results/poti1/stdout-1-6-1.out   | 20 | 13.892226 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  3 | 0.2 | ./experimental-results/poti1/stdout-0-3-1.out   | 40 |  3.500298 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 | 10 | 0.2 | ./experimental-results/poti1/stdout-1-10-1.out  | 12 | 20.108981 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  3 | 0.2 | ./experimental-results/poti1/stdout-1-3-1.out   | 40 |  3.361356 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  4 | 0.2 | ./experimental-results/poti1/stdout-1-4-1.out   | 30 |  5.715538 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  4 | 0.2 | ./experimental-results/poti1/stdout-0-4-1.out   | 30 |  5.372603 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  3 | 0.3 | ./experimental-results/poti1/stdout-1-3-1.out   | 40 |  3.361356 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  8 | 0.3 | ./experimental-results/poti1/stdout-1-8-1.out   | 15 | 24.502174 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  8 | 0.3 | ./experimental-results/poti1/stdout-0-8-1.out   | 15 | 24.663609 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  3 | 0.3 | ./experimental-results/poti1/stdout-0-3-1.out   | 40 |  3.500298 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  4 | 0.3 | ./experimental-results/poti1/stdout-1-4-1.out   | 30 |  5.715538 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  4 | 0.3 | ./experimental-results/poti1/stdout-0-4-1.out   | 30 |  5.372603 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  5 | 0.3 | ./experimental-results/poti1/stdout-1-5-1.out   | 24 |   8.98786 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 | 12 | 0.3 | ./experimental-results/poti1/stdout-1-12-1.out  | 10 | 12.055414 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  6 | 0.3 | ./experimental-results/poti1/stdout-0-6-1.out   | 20 | 13.780027 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 | 12 | 0.3 | ./experimental-results/poti1/stdout-0-12-1.out  | 10 | 11.986502 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  5 | 0.3 | ./experimental-results/poti1/stdout-0-5-1.out   | 24 |  8.969071 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  6 | 0.3 | ./experimental-results/poti1/stdout-1-6-1.out   | 20 | 13.892226 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 | 10 | 0.3 | ./experimental-results/poti1/stdout-1-10-1.out  | 12 | 20.108981 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 | 10 | 0.3 | ./experimental-results/poti1/stdout-0-10-1.out  | 12 | 20.985768 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  6 | 0.4 | ./experimental-results/poti1/stdout-0-6-1.out   | 20 | 13.780027 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  5 | 0.4 | ./experimental-results/poti1/stdout-1-5-1.out   | 24 |   8.98786 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  8 | 0.4 | ./experimental-results/poti1/stdout-0-8-1.out   | 15 | 24.663609 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  6 | 0.4 | ./experimental-results/poti1/stdout-1-6-1.out   | 20 | 13.892226 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 | 10 | 0.4 | ./experimental-results/poti1/stdout-1-10-1.out  | 12 | 20.108981 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 | 12 | 0.4 | ./experimental-results/poti1/stdout-1-12-1.out  | 10 | 12.055414 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 | 10 | 0.4 | ./experimental-results/poti1/stdout-0-10-1.out  | 12 | 20.985768 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 | 12 | 0.4 | ./experimental-results/poti1/stdout-0-12-1.out  | 10 | 11.986502 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  3 | 0.4 | ./experimental-results/poti1/stdout-1-3-1.out   | 40 |  3.361356 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  4 | 0.4 | ./experimental-results/poti1/stdout-0-4-1.out   | 30 |  5.372603 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  8 | 0.4 | ./experimental-results/poti1/stdout-1-8-1.out   | 15 | 24.502174 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  4 | 0.4 | ./experimental-results/poti1/stdout-1-4-1.out   | 30 |  5.715538 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  5 | 0.4 | ./experimental-results/poti1/stdout-0-5-1.out   | 24 |  8.969071 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  3 | 0.4 | ./experimental-results/poti1/stdout-0-3-1.out   | 40 |  3.500298 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 | 12 | 0.5 | ./experimental-results/poti1/stdout-1-12-1.out  | 10 | 12.055414 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  3 | 0.5 | ./experimental-results/poti1/stdout-1-3-1.out   | 40 |  3.361356 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 | 12 | 0.5 | ./experimental-results/poti1/stdout-0-12-1.out  | 10 | 11.986502 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  5 | 0.5 | ./experimental-results/poti1/stdout-1-5-1.out   | 24 |   8.98786 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 | 10 | 0.5 | ./experimental-results/poti1/stdout-0-10-1.out  | 12 | 20.985768 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  3 | 0.5 | ./experimental-results/poti1/stdout-0-3-1.out   | 40 |  3.500298 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  4 | 0.5 | ./experimental-results/poti1/stdout-0-4-1.out   | 30 |  5.372603 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  6 | 0.5 | ./experimental-results/poti1/stdout-1-6-1.out   | 20 | 13.892226 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  8 | 0.5 | ./experimental-results/poti1/stdout-1-8-1.out   | 15 | 24.502174 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  4 | 0.5 | ./experimental-results/poti1/stdout-1-4-1.out   | 30 |  5.715538 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 | 10 | 0.5 | ./experimental-results/poti1/stdout-1-10-1.out  | 12 | 20.108981 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  6 | 0.5 | ./experimental-results/poti1/stdout-0-6-1.out   | 20 | 13.780027 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  8 | 0.5 | ./experimental-results/poti1/stdout-0-8-1.out   | 15 | 24.663609 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  5 | 0.5 | ./experimental-results/poti1/stdout-0-5-1.out   | 24 |  8.969071 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  4 | 0.6 | ./experimental-results/poti1/stdout-1-4-1.out   | 30 |  5.715538 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 | 12 | 0.6 | ./experimental-results/poti1/stdout-0-12-1.out  | 10 | 11.986502 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  6 | 0.6 | ./experimental-results/poti1/stdout-1-6-1.out   | 20 | 13.892226 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  8 | 0.6 | ./experimental-results/poti1/stdout-0-8-1.out   | 15 | 24.663609 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 | 10 | 0.6 | ./experimental-results/poti1/stdout-0-10-1.out  | 12 | 20.985768 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  6 | 0.6 | ./experimental-results/poti1/stdout-0-6-1.out   | 20 | 13.780027 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  5 | 0.6 | ./experimental-results/poti1/stdout-1-5-1.out   | 24 |   8.98786 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 | 12 | 0.6 | ./experimental-results/poti1/stdout-1-12-1.out  | 10 | 12.055414 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  5 | 0.6 | ./experimental-results/poti1/stdout-0-5-1.out   | 24 |  8.969071 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 | 10 | 0.6 | ./experimental-results/poti1/stdout-1-10-1.out  | 12 | 20.108981 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  8 | 0.6 | ./experimental-results/poti1/stdout-1-8-1.out   | 15 | 24.502174 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  3 | 0.6 | ./experimental-results/poti1/stdout-1-3-1.out   | 40 |  3.361356 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  3 | 0.6 | ./experimental-results/poti1/stdout-0-3-1.out   | 40 |  3.500298 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  4 | 0.6 | ./experimental-results/poti1/stdout-0-4-1.out   | 30 |  5.372603 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 | 10 | 0.7 | ./experimental-results/poti1/stdout-1-10-1.out  | 12 | 20.108981 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  3 | 0.7 | ./experimental-results/poti1/stdout-0-3-1.out   | 40 |  3.500298 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  5 | 0.7 | ./experimental-results/poti1/stdout-0-5-1.out   | 24 |  8.969071 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  5 | 0.7 | ./experimental-results/poti1/stdout-1-5-1.out   | 24 |   8.98786 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 | 12 | 0.7 | ./experimental-results/poti1/stdout-0-12-1.out  | 10 | 11.986502 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  8 | 0.7 | ./experimental-results/poti1/stdout-0-8-1.out   | 15 | 24.663609 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  6 | 0.7 | ./experimental-results/poti1/stdout-0-6-1.out   | 20 | 13.780027 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  6 | 0.7 | ./experimental-results/poti1/stdout-1-6-1.out   | 20 | 13.892226 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  4 | 0.7 | ./experimental-results/poti1/stdout-0-4-1.out   | 30 |  5.372603 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  3 | 0.7 | ./experimental-results/poti1/stdout-1-3-1.out   | 40 |  3.361356 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 | 12 | 0.7 | ./experimental-results/poti1/stdout-1-12-1.out  | 10 | 12.055414 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 | 10 | 0.7 | ./experimental-results/poti1/stdout-0-10-1.out  | 12 | 20.985768 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  4 | 0.7 | ./experimental-results/poti1/stdout-1-4-1.out   | 30 |  5.715538 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  8 | 0.7 | ./experimental-results/poti1/stdout-1-8-1.out   | 15 | 24.502174 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  8 | 0.8 | ./experimental-results/poti1/stdout-1-8-1.out   | 15 | 24.502174 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  6 | 0.8 | ./experimental-results/poti1/stdout-0-6-1.out   | 20 | 13.780027 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 | 10 | 0.8 | ./experimental-results/poti1/stdout-1-10-1.out  | 12 | 20.108981 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  4 | 0.8 | ./experimental-results/poti1/stdout-0-4-1.out   | 30 |  5.372603 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  3 | 0.8 | ./experimental-results/poti1/stdout-1-3-1.out   | 40 |  3.361356 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  3 | 0.8 | ./experimental-results/poti1/stdout-0-3-1.out   | 40 |  3.500298 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 | 10 | 0.8 | ./experimental-results/poti1/stdout-0-10-1.out  | 12 | 20.985768 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  6 | 0.8 | ./experimental-results/poti1/stdout-1-6-1.out   | 20 | 13.892226 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 | 12 | 0.8 | ./experimental-results/poti1/stdout-1-12-1.out  | 10 | 12.055414 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  5 | 0.8 | ./experimental-results/poti1/stdout-1-5-1.out   | 24 |   8.98786 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  8 | 0.8 | ./experimental-results/poti1/stdout-0-8-1.out   | 15 | 24.663609 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 |  5 | 0.8 | ./experimental-results/poti1/stdout-0-5-1.out   | 24 |  8.969071 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 0 | 12 | 0.8 | ./experimental-results/poti1/stdout-0-12-1.out  | 10 | 11.986502 |
+| poti1  | Intel(R) Core(TM) i7-14700KF     | 3.4 | 28 | 20 | 1 |  4 | 0.8 | ./experimental-results/poti1/stdout-1-4-1.out   | 30 |  5.715538 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 | 12 | 0.1 | ./experimental-results/cei2/stdout-1-12-1.out   | 10 |  6.703377 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  8 | 0.1 | ./experimental-results/cei2/stdout-0-8-1.out    | 15 | 21.497745 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  4 | 0.1 | ./experimental-results/cei2/stdout-1-4-1.out    | 30 | 17.134024 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  6 | 0.1 | ./experimental-results/cei2/stdout-0-6-1.out    | 20 | 23.648413 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  3 | 0.1 | ./experimental-results/cei2/stdout-0-3-1.out    | 40 | 11.716745 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  3 | 0.1 | ./experimental-results/cei2/stdout-1-3-1.out    | 40 | 11.455997 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  5 | 0.1 | ./experimental-results/cei2/stdout-0-5-1.out    | 24 | 23.985242 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 | 10 | 0.1 | ./experimental-results/cei2/stdout-0-10-1.out   | 12 | 12.487674 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  4 | 0.1 | ./experimental-results/cei2/stdout-0-4-1.out    | 30 | 16.973244 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 | 12 | 0.1 | ./experimental-results/cei2/stdout-0-12-1.out   | 10 |  7.150428 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  5 | 0.1 | ./experimental-results/cei2/stdout-1-5-1.out    | 24 | 23.307501 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 | 10 | 0.1 | ./experimental-results/cei2/stdout-1-10-1.out   | 12 | 12.322053 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  8 | 0.1 | ./experimental-results/cei2/stdout-1-8-1.out    | 15 | 20.960169 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  6 | 0.1 | ./experimental-results/cei2/stdout-1-6-1.out    | 20 | 23.355885 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  5 | 0.2 | ./experimental-results/cei2/stdout-0-5-1.out    | 24 | 23.985242 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  8 | 0.2 | ./experimental-results/cei2/stdout-1-8-1.out    | 15 | 20.960169 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  5 | 0.2 | ./experimental-results/cei2/stdout-1-5-1.out    | 24 | 23.307501 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 | 12 | 0.2 | ./experimental-results/cei2/stdout-0-12-1.out   | 10 |  7.150428 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  6 | 0.2 | ./experimental-results/cei2/stdout-0-6-1.out    | 20 | 23.648413 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  8 | 0.2 | ./experimental-results/cei2/stdout-0-8-1.out    | 15 | 21.497745 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 | 10 | 0.2 | ./experimental-results/cei2/stdout-0-10-1.out   | 12 | 12.487674 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 | 12 | 0.2 | ./experimental-results/cei2/stdout-1-12-1.out   | 10 |  6.703377 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  6 | 0.2 | ./experimental-results/cei2/stdout-1-6-1.out    | 20 | 23.355885 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  3 | 0.2 | ./experimental-results/cei2/stdout-0-3-1.out    | 40 | 11.716745 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 | 10 | 0.2 | ./experimental-results/cei2/stdout-1-10-1.out   | 12 | 12.322053 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  3 | 0.2 | ./experimental-results/cei2/stdout-1-3-1.out    | 40 | 11.455997 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  4 | 0.2 | ./experimental-results/cei2/stdout-1-4-1.out    | 30 | 17.134024 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  4 | 0.2 | ./experimental-results/cei2/stdout-0-4-1.out    | 30 | 16.973244 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  3 | 0.3 | ./experimental-results/cei2/stdout-1-3-1.out    | 40 | 11.455997 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  8 | 0.3 | ./experimental-results/cei2/stdout-1-8-1.out    | 15 | 20.960169 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  8 | 0.3 | ./experimental-results/cei2/stdout-0-8-1.out    | 15 | 21.497745 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  3 | 0.3 | ./experimental-results/cei2/stdout-0-3-1.out    | 40 | 11.716745 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  4 | 0.3 | ./experimental-results/cei2/stdout-1-4-1.out    | 30 | 17.134024 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  4 | 0.3 | ./experimental-results/cei2/stdout-0-4-1.out    | 30 | 16.973244 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  5 | 0.3 | ./experimental-results/cei2/stdout-1-5-1.out    | 24 | 23.307501 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 | 12 | 0.3 | ./experimental-results/cei2/stdout-1-12-1.out   | 10 |  6.703377 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  6 | 0.3 | ./experimental-results/cei2/stdout-0-6-1.out    | 20 | 23.648413 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 | 12 | 0.3 | ./experimental-results/cei2/stdout-0-12-1.out   | 10 |  7.150428 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  5 | 0.3 | ./experimental-results/cei2/stdout-0-5-1.out    | 24 | 23.985242 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  6 | 0.3 | ./experimental-results/cei2/stdout-1-6-1.out    | 20 | 23.355885 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 | 10 | 0.3 | ./experimental-results/cei2/stdout-1-10-1.out   | 12 | 12.322053 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 | 10 | 0.3 | ./experimental-results/cei2/stdout-0-10-1.out   | 12 | 12.487674 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  6 | 0.4 | ./experimental-results/cei2/stdout-0-6-1.out    | 20 | 23.648413 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  5 | 0.4 | ./experimental-results/cei2/stdout-1-5-1.out    | 24 | 23.307501 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  8 | 0.4 | ./experimental-results/cei2/stdout-0-8-1.out    | 15 | 21.497745 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  6 | 0.4 | ./experimental-results/cei2/stdout-1-6-1.out    | 20 | 23.355885 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 | 10 | 0.4 | ./experimental-results/cei2/stdout-1-10-1.out   | 12 | 12.322053 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 | 12 | 0.4 | ./experimental-results/cei2/stdout-1-12-1.out   | 10 |  6.703377 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 | 10 | 0.4 | ./experimental-results/cei2/stdout-0-10-1.out   | 12 | 12.487674 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 | 12 | 0.4 | ./experimental-results/cei2/stdout-0-12-1.out   | 10 |  7.150428 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  3 | 0.4 | ./experimental-results/cei2/stdout-1-3-1.out    | 40 | 11.455997 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  4 | 0.4 | ./experimental-results/cei2/stdout-0-4-1.out    | 30 | 16.973244 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  8 | 0.4 | ./experimental-results/cei2/stdout-1-8-1.out    | 15 | 20.960169 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  4 | 0.4 | ./experimental-results/cei2/stdout-1-4-1.out    | 30 | 17.134024 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  5 | 0.4 | ./experimental-results/cei2/stdout-0-5-1.out    | 24 | 23.985242 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  3 | 0.4 | ./experimental-results/cei2/stdout-0-3-1.out    | 40 | 11.716745 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 | 12 | 0.5 | ./experimental-results/cei2/stdout-1-12-1.out   | 10 |  6.703377 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  3 | 0.5 | ./experimental-results/cei2/stdout-1-3-1.out    | 40 | 11.455997 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 | 12 | 0.5 | ./experimental-results/cei2/stdout-0-12-1.out   | 10 |  7.150428 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  5 | 0.5 | ./experimental-results/cei2/stdout-1-5-1.out    | 24 | 23.307501 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 | 10 | 0.5 | ./experimental-results/cei2/stdout-0-10-1.out   | 12 | 12.487674 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  3 | 0.5 | ./experimental-results/cei2/stdout-0-3-1.out    | 40 | 11.716745 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  4 | 0.5 | ./experimental-results/cei2/stdout-0-4-1.out    | 30 | 16.973244 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  6 | 0.5 | ./experimental-results/cei2/stdout-1-6-1.out    | 20 | 23.355885 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  8 | 0.5 | ./experimental-results/cei2/stdout-1-8-1.out    | 15 | 20.960169 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  4 | 0.5 | ./experimental-results/cei2/stdout-1-4-1.out    | 30 | 17.134024 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 | 10 | 0.5 | ./experimental-results/cei2/stdout-1-10-1.out   | 12 | 12.322053 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  6 | 0.5 | ./experimental-results/cei2/stdout-0-6-1.out    | 20 | 23.648413 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  8 | 0.5 | ./experimental-results/cei2/stdout-0-8-1.out    | 15 | 21.497745 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  5 | 0.5 | ./experimental-results/cei2/stdout-0-5-1.out    | 24 | 23.985242 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  4 | 0.6 | ./experimental-results/cei2/stdout-1-4-1.out    | 30 | 17.134024 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 | 12 | 0.6 | ./experimental-results/cei2/stdout-0-12-1.out   | 10 |  7.150428 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  6 | 0.6 | ./experimental-results/cei2/stdout-1-6-1.out    | 20 | 23.355885 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  8 | 0.6 | ./experimental-results/cei2/stdout-0-8-1.out    | 15 | 21.497745 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 | 10 | 0.6 | ./experimental-results/cei2/stdout-0-10-1.out   | 12 | 12.487674 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  6 | 0.6 | ./experimental-results/cei2/stdout-0-6-1.out    | 20 | 23.648413 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  5 | 0.6 | ./experimental-results/cei2/stdout-1-5-1.out    | 24 | 23.307501 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 | 12 | 0.6 | ./experimental-results/cei2/stdout-1-12-1.out   | 10 |  6.703377 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  5 | 0.6 | ./experimental-results/cei2/stdout-0-5-1.out    | 24 | 23.985242 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 | 10 | 0.6 | ./experimental-results/cei2/stdout-1-10-1.out   | 12 | 12.322053 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  8 | 0.6 | ./experimental-results/cei2/stdout-1-8-1.out    | 15 | 20.960169 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  3 | 0.6 | ./experimental-results/cei2/stdout-1-3-1.out    | 40 | 11.455997 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  3 | 0.6 | ./experimental-results/cei2/stdout-0-3-1.out    | 40 | 11.716745 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  4 | 0.6 | ./experimental-results/cei2/stdout-0-4-1.out    | 30 | 16.973244 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 | 10 | 0.7 | ./experimental-results/cei2/stdout-1-10-1.out   | 12 | 12.322053 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  3 | 0.7 | ./experimental-results/cei2/stdout-0-3-1.out    | 40 | 11.716745 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  5 | 0.7 | ./experimental-results/cei2/stdout-0-5-1.out    | 24 | 23.985242 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  5 | 0.7 | ./experimental-results/cei2/stdout-1-5-1.out    | 24 | 23.307501 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 | 12 | 0.7 | ./experimental-results/cei2/stdout-0-12-1.out   | 10 |  7.150428 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  8 | 0.7 | ./experimental-results/cei2/stdout-0-8-1.out    | 15 | 21.497745 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  6 | 0.7 | ./experimental-results/cei2/stdout-0-6-1.out    | 20 | 23.648413 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  6 | 0.7 | ./experimental-results/cei2/stdout-1-6-1.out    | 20 | 23.355885 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  4 | 0.7 | ./experimental-results/cei2/stdout-0-4-1.out    | 30 | 16.973244 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  3 | 0.7 | ./experimental-results/cei2/stdout-1-3-1.out    | 40 | 11.455997 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 | 12 | 0.7 | ./experimental-results/cei2/stdout-1-12-1.out   | 10 |  6.703377 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 | 10 | 0.7 | ./experimental-results/cei2/stdout-0-10-1.out   | 12 | 12.487674 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  4 | 0.7 | ./experimental-results/cei2/stdout-1-4-1.out    | 30 | 17.134024 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  8 | 0.7 | ./experimental-results/cei2/stdout-1-8-1.out    | 15 | 20.960169 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  8 | 0.8 | ./experimental-results/cei2/stdout-1-8-1.out    | 15 | 20.960169 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  6 | 0.8 | ./experimental-results/cei2/stdout-0-6-1.out    | 20 | 23.648413 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 | 10 | 0.8 | ./experimental-results/cei2/stdout-1-10-1.out   | 12 | 12.322053 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  4 | 0.8 | ./experimental-results/cei2/stdout-0-4-1.out    | 30 | 16.973244 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  3 | 0.8 | ./experimental-results/cei2/stdout-1-3-1.out    | 40 | 11.455997 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  3 | 0.8 | ./experimental-results/cei2/stdout-0-3-1.out    | 40 | 11.716745 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 | 10 | 0.8 | ./experimental-results/cei2/stdout-0-10-1.out   | 12 | 12.487674 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  6 | 0.8 | ./experimental-results/cei2/stdout-1-6-1.out    | 20 | 23.355885 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 | 12 | 0.8 | ./experimental-results/cei2/stdout-1-12-1.out   | 10 |  6.703377 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  5 | 0.8 | ./experimental-results/cei2/stdout-1-5-1.out    | 24 | 23.307501 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  8 | 0.8 | ./experimental-results/cei2/stdout-0-8-1.out    | 15 | 21.497745 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 |  5 | 0.8 | ./experimental-results/cei2/stdout-0-5-1.out    | 24 | 23.985242 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 0 | 12 | 0.8 | ./experimental-results/cei2/stdout-0-12-1.out   | 10 |  7.150428 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 1 |  4 | 0.8 | ./experimental-results/cei2/stdout-1-4-1.out    | 30 | 17.134024 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 | 12 | 0.1 | ./experimental-results/draco1/stdout-1-12-1.out | 10 |  5.646416 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  8 | 0.1 | ./experimental-results/draco1/stdout-0-8-1.out  | 15 | 14.122732 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  4 | 0.1 | ./experimental-results/draco1/stdout-1-4-1.out  | 30 | 13.997061 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  6 | 0.1 | ./experimental-results/draco1/stdout-0-6-1.out  | 20 | 15.396929 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  3 | 0.1 | ./experimental-results/draco1/stdout-0-3-1.out  | 40 |  9.776925 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  3 | 0.1 | ./experimental-results/draco1/stdout-1-3-1.out  | 40 |  9.664965 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  5 | 0.1 | ./experimental-results/draco1/stdout-0-5-1.out  | 24 | 15.723565 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 | 10 | 0.1 | ./experimental-results/draco1/stdout-0-10-1.out | 12 |  9.787363 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  4 | 0.1 | ./experimental-results/draco1/stdout-0-4-1.out  | 30 |  14.25221 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 | 12 | 0.1 | ./experimental-results/draco1/stdout-0-12-1.out | 10 |  5.745982 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  5 | 0.1 | ./experimental-results/draco1/stdout-1-5-1.out  | 24 | 15.516783 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 | 10 | 0.1 | ./experimental-results/draco1/stdout-1-10-1.out | 12 | 10.096111 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  8 | 0.1 | ./experimental-results/draco1/stdout-1-8-1.out  | 15 | 13.975063 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  6 | 0.1 | ./experimental-results/draco1/stdout-1-6-1.out  | 20 |  15.18341 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  5 | 0.2 | ./experimental-results/draco1/stdout-0-5-1.out  | 24 | 15.723565 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  8 | 0.2 | ./experimental-results/draco1/stdout-1-8-1.out  | 15 | 13.975063 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  5 | 0.2 | ./experimental-results/draco1/stdout-1-5-1.out  | 24 | 15.516783 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 | 12 | 0.2 | ./experimental-results/draco1/stdout-0-12-1.out | 10 |  5.745982 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  6 | 0.2 | ./experimental-results/draco1/stdout-0-6-1.out  | 20 | 15.396929 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  8 | 0.2 | ./experimental-results/draco1/stdout-0-8-1.out  | 15 | 14.122732 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 | 10 | 0.2 | ./experimental-results/draco1/stdout-0-10-1.out | 12 |  9.787363 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 | 12 | 0.2 | ./experimental-results/draco1/stdout-1-12-1.out | 10 |  5.646416 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  6 | 0.2 | ./experimental-results/draco1/stdout-1-6-1.out  | 20 |  15.18341 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  3 | 0.2 | ./experimental-results/draco1/stdout-0-3-1.out  | 40 |  9.776925 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 | 10 | 0.2 | ./experimental-results/draco1/stdout-1-10-1.out | 12 | 10.096111 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  3 | 0.2 | ./experimental-results/draco1/stdout-1-3-1.out  | 40 |  9.664965 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  4 | 0.2 | ./experimental-results/draco1/stdout-1-4-1.out  | 30 | 13.997061 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  4 | 0.2 | ./experimental-results/draco1/stdout-0-4-1.out  | 30 |  14.25221 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  3 | 0.3 | ./experimental-results/draco1/stdout-1-3-1.out  | 40 |  9.664965 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  8 | 0.3 | ./experimental-results/draco1/stdout-1-8-1.out  | 15 | 13.975063 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  8 | 0.3 | ./experimental-results/draco1/stdout-0-8-1.out  | 15 | 14.122732 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  3 | 0.3 | ./experimental-results/draco1/stdout-0-3-1.out  | 40 |  9.776925 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  4 | 0.3 | ./experimental-results/draco1/stdout-1-4-1.out  | 30 | 13.997061 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  4 | 0.3 | ./experimental-results/draco1/stdout-0-4-1.out  | 30 |  14.25221 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  5 | 0.3 | ./experimental-results/draco1/stdout-1-5-1.out  | 24 | 15.516783 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 | 12 | 0.3 | ./experimental-results/draco1/stdout-1-12-1.out | 10 |  5.646416 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  6 | 0.3 | ./experimental-results/draco1/stdout-0-6-1.out  | 20 | 15.396929 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 | 12 | 0.3 | ./experimental-results/draco1/stdout-0-12-1.out | 10 |  5.745982 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  5 | 0.3 | ./experimental-results/draco1/stdout-0-5-1.out  | 24 | 15.723565 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  6 | 0.3 | ./experimental-results/draco1/stdout-1-6-1.out  | 20 |  15.18341 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 | 10 | 0.3 | ./experimental-results/draco1/stdout-1-10-1.out | 12 | 10.096111 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 | 10 | 0.3 | ./experimental-results/draco1/stdout-0-10-1.out | 12 |  9.787363 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  6 | 0.4 | ./experimental-results/draco1/stdout-0-6-1.out  | 20 | 15.396929 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  5 | 0.4 | ./experimental-results/draco1/stdout-1-5-1.out  | 24 | 15.516783 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  8 | 0.4 | ./experimental-results/draco1/stdout-0-8-1.out  | 15 | 14.122732 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  6 | 0.4 | ./experimental-results/draco1/stdout-1-6-1.out  | 20 |  15.18341 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 | 10 | 0.4 | ./experimental-results/draco1/stdout-1-10-1.out | 12 | 10.096111 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 | 12 | 0.4 | ./experimental-results/draco1/stdout-1-12-1.out | 10 |  5.646416 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 | 10 | 0.4 | ./experimental-results/draco1/stdout-0-10-1.out | 12 |  9.787363 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 | 12 | 0.4 | ./experimental-results/draco1/stdout-0-12-1.out | 10 |  5.745982 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  3 | 0.4 | ./experimental-results/draco1/stdout-1-3-1.out  | 40 |  9.664965 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  4 | 0.4 | ./experimental-results/draco1/stdout-0-4-1.out  | 30 |  14.25221 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  8 | 0.4 | ./experimental-results/draco1/stdout-1-8-1.out  | 15 | 13.975063 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  4 | 0.4 | ./experimental-results/draco1/stdout-1-4-1.out  | 30 | 13.997061 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  5 | 0.4 | ./experimental-results/draco1/stdout-0-5-1.out  | 24 | 15.723565 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  3 | 0.4 | ./experimental-results/draco1/stdout-0-3-1.out  | 40 |  9.776925 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 | 12 | 0.5 | ./experimental-results/draco1/stdout-1-12-1.out | 10 |  5.646416 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  3 | 0.5 | ./experimental-results/draco1/stdout-1-3-1.out  | 40 |  9.664965 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 | 12 | 0.5 | ./experimental-results/draco1/stdout-0-12-1.out | 10 |  5.745982 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  5 | 0.5 | ./experimental-results/draco1/stdout-1-5-1.out  | 24 | 15.516783 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 | 10 | 0.5 | ./experimental-results/draco1/stdout-0-10-1.out | 12 |  9.787363 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  3 | 0.5 | ./experimental-results/draco1/stdout-0-3-1.out  | 40 |  9.776925 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  4 | 0.5 | ./experimental-results/draco1/stdout-0-4-1.out  | 30 |  14.25221 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  6 | 0.5 | ./experimental-results/draco1/stdout-1-6-1.out  | 20 |  15.18341 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  8 | 0.5 | ./experimental-results/draco1/stdout-1-8-1.out  | 15 | 13.975063 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  4 | 0.5 | ./experimental-results/draco1/stdout-1-4-1.out  | 30 | 13.997061 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 | 10 | 0.5 | ./experimental-results/draco1/stdout-1-10-1.out | 12 | 10.096111 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  6 | 0.5 | ./experimental-results/draco1/stdout-0-6-1.out  | 20 | 15.396929 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  8 | 0.5 | ./experimental-results/draco1/stdout-0-8-1.out  | 15 | 14.122732 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  5 | 0.5 | ./experimental-results/draco1/stdout-0-5-1.out  | 24 | 15.723565 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  4 | 0.6 | ./experimental-results/draco1/stdout-1-4-1.out  | 30 | 13.997061 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 | 12 | 0.6 | ./experimental-results/draco1/stdout-0-12-1.out | 10 |  5.745982 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  6 | 0.6 | ./experimental-results/draco1/stdout-1-6-1.out  | 20 |  15.18341 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  8 | 0.6 | ./experimental-results/draco1/stdout-0-8-1.out  | 15 | 14.122732 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 | 10 | 0.6 | ./experimental-results/draco1/stdout-0-10-1.out | 12 |  9.787363 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  6 | 0.6 | ./experimental-results/draco1/stdout-0-6-1.out  | 20 | 15.396929 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  5 | 0.6 | ./experimental-results/draco1/stdout-1-5-1.out  | 24 | 15.516783 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 | 12 | 0.6 | ./experimental-results/draco1/stdout-1-12-1.out | 10 |  5.646416 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  5 | 0.6 | ./experimental-results/draco1/stdout-0-5-1.out  | 24 | 15.723565 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 | 10 | 0.6 | ./experimental-results/draco1/stdout-1-10-1.out | 12 | 10.096111 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  8 | 0.6 | ./experimental-results/draco1/stdout-1-8-1.out  | 15 | 13.975063 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  3 | 0.6 | ./experimental-results/draco1/stdout-1-3-1.out  | 40 |  9.664965 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  3 | 0.6 | ./experimental-results/draco1/stdout-0-3-1.out  | 40 |  9.776925 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  4 | 0.6 | ./experimental-results/draco1/stdout-0-4-1.out  | 30 |  14.25221 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 | 10 | 0.7 | ./experimental-results/draco1/stdout-1-10-1.out | 12 | 10.096111 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  3 | 0.7 | ./experimental-results/draco1/stdout-0-3-1.out  | 40 |  9.776925 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  5 | 0.7 | ./experimental-results/draco1/stdout-0-5-1.out  | 24 | 15.723565 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  5 | 0.7 | ./experimental-results/draco1/stdout-1-5-1.out  | 24 | 15.516783 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 | 12 | 0.7 | ./experimental-results/draco1/stdout-0-12-1.out | 10 |  5.745982 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  8 | 0.7 | ./experimental-results/draco1/stdout-0-8-1.out  | 15 | 14.122732 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  6 | 0.7 | ./experimental-results/draco1/stdout-0-6-1.out  | 20 | 15.396929 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  6 | 0.7 | ./experimental-results/draco1/stdout-1-6-1.out  | 20 |  15.18341 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  4 | 0.7 | ./experimental-results/draco1/stdout-0-4-1.out  | 30 |  14.25221 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  3 | 0.7 | ./experimental-results/draco1/stdout-1-3-1.out  | 40 |  9.664965 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 | 12 | 0.7 | ./experimental-results/draco1/stdout-1-12-1.out | 10 |  5.646416 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 | 10 | 0.7 | ./experimental-results/draco1/stdout-0-10-1.out | 12 |  9.787363 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  4 | 0.7 | ./experimental-results/draco1/stdout-1-4-1.out  | 30 | 13.997061 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  8 | 0.7 | ./experimental-results/draco1/stdout-1-8-1.out  | 15 | 13.975063 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  8 | 0.8 | ./experimental-results/draco1/stdout-1-8-1.out  | 15 | 13.975063 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  6 | 0.8 | ./experimental-results/draco1/stdout-0-6-1.out  | 20 | 15.396929 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 | 10 | 0.8 | ./experimental-results/draco1/stdout-1-10-1.out | 12 | 10.096111 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  4 | 0.8 | ./experimental-results/draco1/stdout-0-4-1.out  | 30 |  14.25221 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  3 | 0.8 | ./experimental-results/draco1/stdout-1-3-1.out  | 40 |  9.664965 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  3 | 0.8 | ./experimental-results/draco1/stdout-0-3-1.out  | 40 |  9.776925 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 | 10 | 0.8 | ./experimental-results/draco1/stdout-0-10-1.out | 12 |  9.787363 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  6 | 0.8 | ./experimental-results/draco1/stdout-1-6-1.out  | 20 |  15.18341 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 | 12 | 0.8 | ./experimental-results/draco1/stdout-1-12-1.out | 10 |  5.646416 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  5 | 0.8 | ./experimental-results/draco1/stdout-1-5-1.out  | 24 | 15.516783 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  8 | 0.8 | ./experimental-results/draco1/stdout-0-8-1.out  | 15 | 14.122732 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 |  5 | 0.8 | ./experimental-results/draco1/stdout-0-5-1.out  | 24 | 15.723565 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 0 | 12 | 0.8 | ./experimental-results/draco1/stdout-0-12-1.out | 10 |  5.745982 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 1 |  4 | 0.8 | ./experimental-results/draco1/stdout-1-4-1.out  | 30 | 13.997061 |
+
+#+BEGIN_SRC R :session *R* :async yes
+
+  base_dir <- "~/experiments/msamples-cpu-star-fletcher/comparison"
+  exp_dir <- paste0(base_dir, "/experimental-results")
+
+  machines <- tribble(
+    ~Machine, ~Processor, ~Ghz, ~Threads, ~Cores,
+    # "potiTBD", "Intel(R) Core(TM) i7-14700KF", 3.4, 28, 20,
+    "cei2", "2 x Intel(R) Xeon(R) Silver 4116", 2.1, 48, 24,
+    "draco1", "2 x Intel(R) Xeon(R) E5-2640 v2", 2.0, 32, 16
+  )
+
+  experiments <- read_csv(paste0(base_dir, '/ex-cpu-msamples-base.csv'))
+
+  all <- machines |> cross_join(experiments)
+  print(all)
+
+  msamples_base_table <- all |>
+    mutate(FILE = paste0(exp_dir,"/", Machine ,"/stdout-", replication, ".out")) |>
+    mutate(Msamples = map_dbl(FILE, function(file) {
+      #print(file)
+      res <- read_lines(file) |>
+        str_subset("MSamples/s") |> 
+        str_extract("[\\d.]+") |> 
+        as.numeric()
+      res[1]
+    })) |>
+    group_by(across(-c(replication, Msamples, FILE))) |>
+    summarize(Mean = mean(Msamples), Min = min(Msamples), Max = max(Msamples)) |> print()
+  
+#+END_SRC
+
+#+RESULTS:
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 |    25.0260775 | 24.607806 | 26.381761 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 18.0270485625 | 17.471431 | 18.693312 |
+
+** Visualização de Dados
+
+
+  #+BEGIN_SRC R :session *R* :async yes  :results output silent
+    #plot_msamples <- function(io_state){
+
+    x_breaks <- sort(unique(msamples_table$BlockSize ^ 3))
+    io_state <- 0
+
+    base_data <- msamples_base_table |> select(Machine, Min, Mean, Max, -Ghz, -Threads, -Processor)
+
+    viz_table <- right_join(
+    	msamples_table, 
+    	base_data, 
+    	by = c("Machine" = "Machine")
+    )
+
+    ggplot(viz_table |> filter(WithIO == io_state), aes(x = BlockSize ^ 3, y = Msamples)) +
+    geom_jitter(size = 3, alpha = 0.3) +
+    scale_x_continuous(breaks = x_breaks, trans = "log10") +
+    # lines of the other execution
+    geom_hline(aes(yintercept = Mean), linetype = "dashed", color = "red", linewidth = 1) +
+    geom_hline(aes(yintercept = Min), linetype = "dashed", color = "pink", linewidth = 1) +
+    geom_hline(aes(yintercept = Max), linetype = "dashed", color = "pink", linewidth = 1) +
+    #geom_boxplot(aes(group = BlockSize), outlier.shape = NA, fill = "steelblue", alpha = 0.4) +
+    #stat_summary(fun = mean, geom = "line", aes(group = 1), color = "blue", linewidth = 1.2) +
+    #geom_line(aes(group = Msamples), linewidth = 1) + 
+    facet_grid(~ Machine, labeller = label_both) + 
+    labs(
+    	title = paste0("Msamples vs. Block Size when WithIO = ", io_state),
+    	subtitle = "Faceted by Machine",
+    	x = "Block Size",
+    	y = "Msamples/s"
+    ) +
+    theme_bw(base_size=20) +
+    theme(legend.position = "bottom")
+    #}
+    # plot_msamples(0) + plot_msamples(1)
+
+
+
+#+END_SRC
+
+

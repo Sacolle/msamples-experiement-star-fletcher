@@ -73,10 +73,11 @@ Se usa-se #, seria a primeira ocorrência.
 
 ** Análise
 
-#+BEGIN_SRC R
+#+BEGIN_SRC R :session *R* :async yes
   options(crayon.enabled = FALSE)
   library(starvz)
   library(tidyverse)
+  library(ggplot2)
 
   base_dir = "./experimental-results"
   dirs = list.dirs(base_dir, recursive = FALSE)
@@ -88,16 +89,116 @@ Se usa-se #, seria a primeira ocorrência.
 
   all <- ds |> cross_join(experiments)
 
-  all |>
-     mutate(PATH = paste0(DIR,"/", WithIO, "/", Size, "/",Segmentation, "/", Steps)) |> print()
-     # mutate(DATA = map(PATH, starvz_read)) |> print()
-     #mutate(OCCUPANCY = map(DATA, function(x) {
-     #app = x$Application
-     #app |> group_by(Value) |> summarize(N = n())
-     #})) |>
-     #unnest(OCCUPANCY) |>
-     #select(Machine, Value, N)
+  data_table <- all |>
+     mutate(PATH = paste0(DIR,"/", WithIO, "/", Size, "/",Segmentation, "/", Steps)) |>
+    #filter(Size < 176) |>
+     mutate(DATA = map(PATH, starvz_read)) |>
+     mutate(OCCUPANCY = map(DATA, function(x) {
+       app = x$Application
+       app |>
+         group_by(ResourceId) |>
+         summarize(
+           TD = sum(Duration),
+           MakeSpan = max(End) - min(Start),
+           .groups = "drop"
+           ) |>
+         summarize(P = sum(TD) / sum(MakeSpan) * 100)
+     })) |> 
+     unnest(OCCUPANCY)
+#+END_SRC
+
+
+#+BEGIN_SRC R :session *R* :async yes
+  plot <- function(io_state){
+    ggplot(data_table |> filter(WithIO == io_state), aes(x = Size, y = P, color = as.factor(Steps))) +
+    geom_point(size = 3, alpha = 0.8) +
+    scale_y_continuous(breaks = seq(0, 100, by = 5)) +
+    ylim(0,100) +
+    geom_line(aes(group = Steps), linewidth = 1) + # Adds lines connecting the points
+    facet_grid(Machine ~ Segmentation, labeller = label_both) + # Creates a separate panel for each Segmentation size
+    #scale_color_manual(values = c("0" = "#F8766D", "1" = "#00BFC4"), 
+    #                   labels = c("0 (No IO)", "1 (With IO)")) +
+    labs(
+        title = paste0("Occupancy vs. Size when WithIO = ", io_state),
+        subtitle = "Faceted by Segmentation Size",
+        x = "Size",
+        y = "Occupancy (%)",
+        color = "I/O Status"
+    ) +
+    theme_minimal() +
+    theme(legend.position = "bottom")
+  }
+  plot(0) + plot(1)
 
 #+END_SRC
 
 #+RESULTS:
+
+Gráfico estranho, validando que não há tasks de /block_write/ quando /WithIO == 0/.
+
+#+BEGIN_SRC R :session *R* :async yes
+        data_table |>
+          filter(WithIO == 0) |>
+          mutate(BW = map(DATA, function(x){
+            app = x$Application
+            app |> group_by(Value) |> summarize(N = n())
+          })) |>
+          unnest(BW) |>
+          select(Machine, Size, Value, N) |>
+          filter(Value != "wave_insertion") |>
+          filter(Value != "wave_propagation") 
+
+#+END_SRC
+
+#+RESULTS:
+
+Realmente não tem. Não sei explicar o fenômeno.
+
+Vamos fixar nos tamanhos 96, 136 e 176 e verificar qual tem o maior Msamples para IO=0.
+
+#+BEGIN_SRC R :session *R* :async yes :results output silent
+  library(readr)
+  library(stringr)
+  extra_data = "./other-files-results/"
+
+  msamples_table <- all |>
+    filter(Blocks == 0.1) |>
+    mutate(DIR = sub("./", extra_data, DIR, fixed = TRUE)) |>
+    mutate(FILE = paste0(DIR,"/stdout-", WithIO, "-", Size, "-",Segmentation, "-", Steps, ".out")) |>
+    mutate(Msamples = map_dbl(FILE, function(file) {
+      #print(file)
+      read_lines(file) |>
+        tail(1) |>
+        str_remove("Msamples/s: ") |>
+        as.numeric()
+    })) |>
+    arrange(-Msamples) |>
+    select(-DIR, -FILE, -Blocks)
+#+END_SRC
+
+
+#+BEGIN_SRC R :session *R* :async yes  :results output silent
+  plot_msamples <- function(io_state){
+    ggplot(msamples_table |> filter(WithIO == io_state), aes(x = Size, y = Msamples, color = as.factor(Steps))) +
+    geom_point(size = 3, alpha = 0.8) +
+    geom_line(aes(group = Steps), linewidth = 1) + # Adds lines connecting the points
+    scale_y_continuous(breaks = seq(0, 100, by = 5)) +
+    facet_grid(Machine ~ Segmentation, labeller = label_both) + 
+    labs(
+        title = paste0("Msamples vs. Size when WithIO = ", io_state),
+        subtitle = "Faceted by Segmentation Size",
+        x = "Size",
+        y = "Msamples/s",
+        color = "I/O Status"
+    ) +
+    theme_minimal() +
+    theme(legend.position = "bottom")
+  }
+  plot_msamples(0) + plot_msamples(1)
+
+#+END_SRC
+
+#+RESULTS:
+
+
+
