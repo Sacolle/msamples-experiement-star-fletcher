@@ -1,0 +1,132 @@
+* Fazer os dados do experimento
+
+
+** Projeto Experimental
+
+Temos um tamanho fixo, 120.
+Para o Fletcher-Base, queremos apenas saber
+qual a execução dele para o tamanho escolhido em cada máquina.
+
+#+BEGIN_SRC R :session *R* :async yes
+  library(DoE.base)
+  library(glue)
+  library(tidyverse)
+
+  replications = 16
+
+  cpu_factors <- tibble("replication" = c(1:16))
+
+  # machines = c("poti", "cei", "draco")
+
+  #ex <- generate_experiment(cpu_factors, replications, seed)
+
+  cpu_factors |> readr::write_csv(glue("./ex-cpu-msamples-base.csv"))
+#+END_SRC
+
+#+RESULTS:
+|  1 |
+|  2 |
+|  3 |
+|  4 |
+|  5 |
+|  6 |
+|  7 |
+|  8 |
+|  9 |
+| 10 |
+| 11 |
+| 12 |
+| 13 |
+| 14 |
+| 15 |
+| 16 |
+
+
+
+** Análise de Dados
+
+
+#+BEGIN_SRC R :session *R* :async yes
+  options(crayon.enabled = FALSE)
+  library(starvz)
+  library(tidyverse)
+  library(ggplot2)
+  library(dplyr)
+
+  base_dir = "./experimental-results"
+
+  machines <- tribble(
+    ~Machine, ~Processor, ~Ghz, ~Threads, ~Cores,
+    # "potiTBD", "Intel(R) Core(TM) i7-14700KF", 3.4, 28, 20,
+    "cei2", "2 x Intel(R) Xeon(R) Silver 4116", 2.1, 48, 24,
+    "draco1", "2 x Intel(R) Xeon(R) E5-2640 v2", 2.0, 32, 16
+  )
+
+  experiments <- read_csv('./ex-cpu-msamples-base.csv')
+
+  all <- machines |> cross_join(experiments)
+
+  msamples_table <- all |>
+    mutate(FILE = paste0(base_dir,"/", Machine ,"/stdout-", replications, ".out")) |>
+    mutate(Msamples = map_dbl(FILE, function(file) {
+      #print(file)
+      res <- read_lines(file) |>
+        str_subset("MSamples/s") |> 
+        str_extract("[\\d.]+") |> 
+        as.numeric()
+
+      res[1]
+    })) 
+#+END_SRC
+
+#+RESULTS:
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 |  1 | ./experimental-results/cei2/stdout-16.out   | 24.769905 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 |  2 | ./experimental-results/cei2/stdout-16.out   | 24.769905 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 |  3 | ./experimental-results/cei2/stdout-16.out   | 24.769905 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 |  4 | ./experimental-results/cei2/stdout-16.out   | 24.769905 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 |  5 | ./experimental-results/cei2/stdout-16.out   | 24.769905 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 |  6 | ./experimental-results/cei2/stdout-16.out   | 24.769905 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 |  7 | ./experimental-results/cei2/stdout-16.out   | 24.769905 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 |  8 | ./experimental-results/cei2/stdout-16.out   | 24.769905 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 |  9 | ./experimental-results/cei2/stdout-16.out   | 24.769905 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 10 | ./experimental-results/cei2/stdout-16.out   | 24.769905 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 11 | ./experimental-results/cei2/stdout-16.out   | 24.769905 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 12 | ./experimental-results/cei2/stdout-16.out   | 24.769905 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 13 | ./experimental-results/cei2/stdout-16.out   | 24.769905 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 14 | ./experimental-results/cei2/stdout-16.out   | 24.769905 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 15 | ./experimental-results/cei2/stdout-16.out   | 24.769905 |
+| cei2   | 2 x Intel(R) Xeon(R) Silver 4116 | 2.1 | 48 | 24 | 16 | ./experimental-results/cei2/stdout-16.out   | 24.769905 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 |  1 | ./experimental-results/draco1/stdout-16.out | 18.399865 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 |  2 | ./experimental-results/draco1/stdout-16.out | 18.399865 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 |  3 | ./experimental-results/draco1/stdout-16.out | 18.399865 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 |  4 | ./experimental-results/draco1/stdout-16.out | 18.399865 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 |  5 | ./experimental-results/draco1/stdout-16.out | 18.399865 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 |  6 | ./experimental-results/draco1/stdout-16.out | 18.399865 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 |  7 | ./experimental-results/draco1/stdout-16.out | 18.399865 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 |  8 | ./experimental-results/draco1/stdout-16.out | 18.399865 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 |  9 | ./experimental-results/draco1/stdout-16.out | 18.399865 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 10 | ./experimental-results/draco1/stdout-16.out | 18.399865 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 11 | ./experimental-results/draco1/stdout-16.out | 18.399865 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 12 | ./experimental-results/draco1/stdout-16.out | 18.399865 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 13 | ./experimental-results/draco1/stdout-16.out | 18.399865 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 14 | ./experimental-results/draco1/stdout-16.out | 18.399865 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 15 | ./experimental-results/draco1/stdout-16.out | 18.399865 |
+| draco1 | 2 x Intel(R) Xeon(R) E5-2640 v2  |   2 | 32 | 16 | 16 | ./experimental-results/draco1/stdout-16.out | 18.399865 |
+
+** Visualização de Dados
+
+
+#+BEGIN_SRC R :session *R* :async yes  :results output silent
+  ggplot(msamples_table, aes(x = Machine, y = Msamples)) +
+  geom_jitter(size = 3, alpha = 0.3) +
+  labs(
+      title = paste0("Msamples vs. Machine"),
+      x = "Machine",
+      y = "Msamples/s"
+  ) +
+  theme_bw(base_size=32) +
+  theme(legend.position = "bottom")
+
+#+END_SRC
+
+

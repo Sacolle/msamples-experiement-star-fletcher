@@ -128,22 +128,22 @@ fazer isso para o Star-Fletcher e o Fletcher-base.
 
 
 #+BEGIN_SRC R :session *R* :async yes  :results output silent
-  plot_msamples <- function(io_state){
+    #plot_msamples <- function(io_state){
 
     x_breaks <- sort(unique(msamples_table$BlockSize ^ 3))
+    io_state <- 0
 
     base_data <- msamples_base_table |> select(Machine, Min, Mean, Max, -Ghz, -Threads, -Processor)
 
     viz_table <- right_join(
-  	    msamples_table |> mutate(Mach = substr(Machine, start = 1, stop = 3)),
-  	    base_data |> mutate(Mach = substr(Machine, start = 1, stop = 3)), 
-  	    by = c("Mach" = "Mach")
+    	msamples_table |> mutate(Mach = substr(Machine, start = 1, stop = 3)),
+    	base_data |> mutate(Mach = substr(Machine, start = 1, stop = 3)), 
+    	by = c("Mach" = "Mach")
     )
 
     ggplot(viz_table |> filter(WithIO == io_state), aes(x = BlockSize ^ 3, y = Msamples)) +
     geom_jitter(size = 3, alpha = 0.3) +
     scale_x_continuous(breaks = x_breaks, trans = "log10") +
-    scale_y_continuous(breaks = seq(0, 30, 1)) +
     # lines of the other execution
     geom_hline(aes(yintercept = Mean), linetype = "dashed", color = "red", linewidth = 1) +
     geom_hline(aes(yintercept = Min), linetype = "dashed", color = "pink", linewidth = 1) +
@@ -153,24 +153,15 @@ fazer isso para o Star-Fletcher e o Fletcher-base.
     #geom_line(aes(group = Msamples), linewidth = 1) + 
     facet_grid(~ Machine.x) + 
     labs(
-  	    title = paste0("Msamples vs. Block Size when WithIO = ", io_state),
-  	    subtitle = "Faceted by Machine",
-  	    x = "Block Size",
-  	    y = "Msamples/s"
+    	title = paste0("Msamples vs. Block Size when WithIO = ", io_state),
+    	subtitle = "Faceted by Machine",
+    	x = "Block Size",
+    	y = "Msamples/s"
     ) +
-    theme_bw(base_size=15) +
+    theme_bw(base_size=20) +
     theme(legend.position = "bottom")
-  }
-
-  plot_msamples(0)
-
-  ggsave("comparacao-base-starpu-io-0.pdf", width = 15, height = 10)
-
-  plot_msamples(1)
-
-  ggsave("comparacao-base-starpu-io-1.pdf", width = 15, height = 10)
-  #}
-  # plot_msamples(0) + plot_msamples(1)
+    #}
+    # plot_msamples(0) + plot_msamples(1)
 
 
 
