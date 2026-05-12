@@ -1,0 +1,88 @@
+* Fazer os dados do experimento
+
+
+** Projeto Experimental
+
+Queremos agora observar se há uma distribuição bimodal, ou até trimodal nos blocos
+Então usamos um tamanho maior de bloco base -> 360, porém com menos iterações e menos combinações.
+
+
+#+BEGIN_SRC R :session *R* :async yes
+  library(DoE.base)
+  library(glue)
+  library(tidyverse)
+
+  border_size = 4
+  absorb_size = 8
+  total_width = 360
+  width = total_width - 2 * (border_size + absorb_size)
+  seed = 0
+  output = 5 # output every 5 steps
+  replications = 3
+
+  block_sizes = c(1000, 3375, 8000, 27000, 64000) |> map(function(x){ total_width / x^(1/3) })
+
+  generate_experiment <- function(factors, replications, seed) {
+    DoE.base::fac.design(
+      nfactors = length(factors),
+      replications = replications,
+      repeat.only = FALSE,
+      randomize = TRUE,
+      seed = seed,
+      nlevels = sapply(factors, length),
+      factor.names = factors
+    )
+  }
+
+  cpu_factors <- list(
+    WithIO = c(0, 1),
+    Segmentation = block_sizes
+  )
+
+  # machines = c("poti", "cei", "draco")
+
+
+  ex <- generate_experiment(cpu_factors, replications, seed)
+
+  print(dim(ex))
+
+  ex |> readr::write_csv(glue("./modal-distribution.csv"))
+#+END_SRC
+
+
+** Análise de Dados
+
+Abaixo é só uma cópia do outro arquivo
+
+
+#+BEGIN_SRC R :session *R* :async yes :results output silent
+  options(crayon.enabled = FALSE)
+  library(starvz)
+  library(tidyverse)
+  library(ggplot2)
+  library(dplyr)
+
+  base_dir = "./experimental-results"
+
+  machines <- tribble(
+    ~Machine, ~Processor, ~Ghz, ~Threads, ~Cores,
+    "poti1", "Intel(R) Core(TM) i7-14700KF", 3.4, 28, 20,
+    "cei2", "2 x Intel(R) Xeon(R) Silver 4116", 2.1, 48, 24,
+    "draco1", "2 x Intel(R) Xeon(R) E5-2640 v2", 2.0, 32, 16
+  )
+
+  experiments <- read_csv('./ex-cpu-msamples.csv')
+
+  all <- machines |> cross_join(experiments)
+
+  msamples_table <- all |>
+    mutate(FILE = paste0(base_dir,"/", Machine ,"/stdout-", WithIO, "-", Segmentation, "-", substring(1, Blocks), ".out")) |>
+    mutate(BlockSize = 120 / Segmentation) |>
+    mutate(Msamples = map_dbl(FILE, function(file) {
+      #print(file)
+      read_lines(file) |>
+        tail(1) |>
+        str_remove("Msamples/s: ") |>
+        as.numeric()
+    })) 
+#+END_SRC
